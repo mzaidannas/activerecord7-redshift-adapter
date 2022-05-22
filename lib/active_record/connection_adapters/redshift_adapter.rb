@@ -375,48 +375,57 @@ module ActiveRecord
           }
         end
 
-        def initialize_type_map(m) # :nodoc:
-          register_class_with_limit m, 'int2', Type::Integer
-          register_class_with_limit m, 'int4', Type::Integer
-          register_class_with_limit m, 'int8', Type::Integer
-          m.alias_type 'oid', 'int2'
-          m.register_type 'float4', Type::Float.new
-          m.alias_type 'float8', 'float4'
-          m.register_type 'text', Type::Text.new
-          register_class_with_limit m, 'varchar', Type::String
-          m.alias_type 'char', 'varchar'
-          m.alias_type 'name', 'varchar'
-          m.alias_type 'bpchar', 'varchar'
-          m.register_type 'bool', Type::Boolean.new
-          m.alias_type 'timestamptz', 'timestamp'
-          m.register_type 'date', Type::Date.new
-          m.register_type 'time', Type::Time.new
+        class << self
+          def initialize_type_map(m) # :nodoc:
+            m.register_type "int2", Type::Integer.new(limit: 2)
+            m.register_type "int4", Type::Integer.new(limit: 4)
+            m.register_type "int8", Type::Integer.new(limit: 8)
+            m.alias_type 'oid', 'int2'
+            m.register_type 'float4', Type::Float.new
+            m.alias_type 'float8', 'float4'
+            m.register_type 'text', Type::Text.new
+            register_class_with_limit m, 'varchar', Type::String
+            m.alias_type 'char', 'varchar'
+            m.alias_type 'name', 'varchar'
+            m.alias_type 'bpchar', 'varchar'
+            m.register_type 'bool', Type::Boolean.new
+            m.alias_type 'timestamptz', 'timestamp'
+            m.register_type 'date', Type::Date.new
+            m.register_type 'time', Type::Time.new
 
-          m.register_type 'timestamp' do |_, _, sql_type|
-            precision = extract_precision(sql_type)
-            OID::DateTime.new(precision: precision)
-          end
+            m.register_type 'timestamp' do |_, _, sql_type|
+              precision = extract_precision(sql_type)
+              OID::DateTime.new(precision: precision)
+            end
 
-          m.register_type 'numeric' do |_, fmod, sql_type|
-            precision = extract_precision(sql_type)
-            scale = extract_scale(sql_type)
+            m.register_type 'numeric' do |_, fmod, sql_type|
+              precision = extract_precision(sql_type)
+              scale = extract_scale(sql_type)
 
-            # The type for the numeric depends on the width of the field,
-            # so we'll do something special here.
-            #
-            # When dealing with decimal columns:
-            #
-            # places after decimal  = fmod - 4 & 0xffff
-            # places before decimal = (fmod - 4) >> 16 & 0xffff
-            if fmod && (fmod - 4 & 0xffff).zero?
-              # FIXME: Remove this class, and the second argument to
-              # lookups on PG
-              Type::DecimalWithoutScale.new(precision: precision)
-            else
-              OID::Decimal.new(precision: precision, scale: scale)
+              # The type for the numeric depends on the width of the field,
+              # so we'll do something special here.
+              #
+              # When dealing with decimal columns:
+              #
+              # places after decimal  = fmod - 4 & 0xffff
+              # places before decimal = (fmod - 4) >> 16 & 0xffff
+              if fmod && (fmod - 4 & 0xffff).zero?
+                # FIXME: Remove this class, and the second argument to
+                # lookups on PG
+                Type::DecimalWithoutScale.new(precision: precision)
+              else
+                OID::Decimal.new(precision: precision, scale: scale)
+              end
             end
           end
+        end
 
+        def type_map
+          @type_map ||= Type::HashLookupTypeMap.new
+        end
+
+        def initialize_type_map(m = type_map)
+          self.class.initialize_type_map(m)
           load_additional_types(m)
         end
 
